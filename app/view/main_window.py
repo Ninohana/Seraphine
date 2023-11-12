@@ -15,7 +15,7 @@ from PyQt5.QtGui import QIcon, QImage, QCursor
 from PyQt5.QtWidgets import QApplication, QSystemTrayIcon
 from qfluentwidgets import (NavigationItemPosition, InfoBar, InfoBarPosition, Action,
                             FluentWindow, SplashScreen, MessageBox, SmoothScrollArea,
-                            ToolTipFilter)
+                            ToolTipFilter, setTheme, Theme)
 from qfluentwidgets import FluentIcon as FIF
 import pyperclip
 
@@ -90,6 +90,7 @@ class MainWindow(FluentWindow):
         self.__conncetSignalToSlot()
 
         self.splashScreen.finish()
+        setTheme(cfg.get(cfg.themeMode))
 
     def __initInterface(self):
         self.__lockInterface()
@@ -198,7 +199,9 @@ class MainWindow(FluentWindow):
             "QLabel {font: 13px 'Segoe UI', 'Microsoft YaHei';}")
         self.titleBar.hBoxLayout.insertSpacing(0, 10)
 
-        self.setMicaEffectEnabled(cfg.get(cfg.micaEnabled))
+        # self.setMicaEffectEnabled(cfg.get(cfg.micaEnabled))
+        cfg.set(cfg.micaEnabled, False)
+        self.setMicaEffectEnabled(False)
 
         self.splashScreen = SplashScreen(self.windowIcon(), self)
         self.splashScreen.setIconSize(QSize(106, 106))
@@ -220,6 +223,16 @@ class MainWindow(FluentWindow):
 
         self.oldHook = sys.excepthook
         sys.excepthook = self.exceptHook
+        # self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+
+        # cfg.themeChanged.emit(cfg.get(cfg.themeMode))
+
+        # tmpTheme = cfg.get(cfg.themeMode)
+        # if tmpTheme == Theme.AUTO:
+        #     cfg.set(cfg.themeMode, Theme.DARK, False)
+        # else:
+        #     cfg.set(cfg.themeMode, Theme.AUTO, False)
+        # cfg.set(cfg.themeMode, tmpTheme, False)
 
     def __onShowLcuConnectError(self, api, obj):
         if type(obj) is SummonerGamesNotFound:
@@ -1248,7 +1261,8 @@ class MainWindow(FluentWindow):
                     "teammatesMarker": teammatesMarker,
                     "kda": [kill, deaths, assists],
                     # 上野中辅下
-                    "order": pos.index(item.get('selectedPosition')) if item.get('selectedPosition') in pos else len(pos)
+                    "order": pos.index(item.get('selectedPosition')) if item.get('selectedPosition') in pos else len(
+                        pos)
                 }
 
             with ThreadPoolExecutor() as executor:

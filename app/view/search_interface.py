@@ -3,7 +3,7 @@ import time
 
 import pyperclip
 from PyQt5.QtWidgets import (QVBoxLayout, QHBoxLayout, QFrame,
-                             QSpacerItem, QSizePolicy, QLabel, QStackedWidget, QWidget, QCompleter)
+                             QSpacerItem, QSizePolicy, QLabel, QStackedWidget, QWidget, QCompleter, QGridLayout)
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QPixmap
 from qfluentwidgets import (SmoothScrollArea, LineEdit, PushButton, ToolButton, InfoBar,
@@ -15,6 +15,8 @@ from ..common.style_sheet import StyleSheet
 from ..common.icons import Icon
 from ..common.config import cfg
 from ..components.champion_icon_widget import RoundIcon
+from ..components.chart_icon_label import ChartIconLabel
+from ..components.game_detail_chart_widget import GameDetailChartWidget
 from ..components.mode_filter_widget import ModeFilterWidget
 from ..components.search_line_edit import SearchLineEdit
 from ..components.summoner_name_button import SummonerName
@@ -117,8 +119,9 @@ class GamesTab(QFrame):
                 game = connector.getGameDetailByGameId(self.gameId)
 
                 if nowPuuid == self.puuid:  # 当请求对局详情时, 如果切换了查询的召唤师, 就放弃数据, 重新请求
-                    game = processGameDetailData(self.puuid, game)
+                    game = processGameDetailData(self.puuid, game, True)
                     self.gameDetailReady.emit(game)
+                    self.parent().gameDetailView.chartWidget.initChartHtml(game)
 
                 if nowGameId == self.gameId:
                     break
@@ -340,9 +343,19 @@ class GameDetailView(QFrame):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+
         self.vBoxLayout = QVBoxLayout(self)
         self.titleBar = GameTitleBar()
 
+        self.stackWidget = QStackedWidget()
+
+        self.chartWholeWidget = QWidget()
+        self.chartGLayout = QGridLayout()
+        self.chartIconWidget = ChartIconLabel()
+        self.chartWidget = GameDetailChartWidget()
+
+        self.teamViewWidget = QWidget()
+        self.teamVLayout = QVBoxLayout()
         self.teamView1 = TeamView()
         self.teamView2 = TeamView()
 
@@ -359,6 +372,9 @@ class GameDetailView(QFrame):
             lambda: self.__setLoadingPageEnabeld(True))
         self.hideLoadingPage.connect(
             lambda: self.__setLoadingPageEnabeld(False))
+        cfg.themeChanged.connect(
+            lambda: self.chartWidget.refresh()
+        )
 
     def clear(self):
         for i in reversed(range(self.vBoxLayout.count())):
@@ -370,6 +386,15 @@ class GameDetailView(QFrame):
 
         self.titleBar = GameTitleBar()
 
+        self.stackWidget = QStackedWidget()
+
+        self.chartWholeWidget = QWidget()
+        self.chartGLayout = QGridLayout()
+        self.chartIconWidget = ChartIconLabel()
+        self.chartWidget = GameDetailChartWidget()
+
+        self.teamViewWidget = QWidget()
+        self.teamVLayout = QVBoxLayout()
         self.teamView1 = TeamView()
         self.teamView2 = TeamView()
 
@@ -382,13 +407,30 @@ class GameDetailView(QFrame):
 
     def __initLayout(self):
         self.vBoxLayout.addWidget(self.titleBar)
-        self.vBoxLayout.addWidget(self.teamView1)
-        self.vBoxLayout.addWidget(self.teamView2)
 
-        self.vBoxLayout.addWidget(self.extraTeamView1)
-        self.vBoxLayout.addWidget(self.extraTeamView2)
+        self.teamVLayout.addWidget(self.teamView1)
+        self.teamVLayout.addWidget(self.teamView2)
+
+        self.teamVLayout.addWidget(self.extraTeamView1)
+        self.teamVLayout.addWidget(self.extraTeamView2)
 
         self.vBoxLayout.addWidget(self.processRing, alignment=Qt.AlignCenter)
+
+        self.chartGLayout.addWidget(self.chartIconWidget, 0, 0)
+        self.chartGLayout.addWidget(self.chartWidget, 0, 0)
+        self.chartWholeWidget.setLayout(self.chartGLayout)
+        self.chartWholeWidget.setObjectName("chartWholeWidget")
+
+        self.stackWidget.addWidget(self.teamViewWidget)
+        self.stackWidget.addWidget(self.chartWholeWidget)
+
+        # 0 = 详情
+        # 1 = 图表
+        # 2 = 时间轴 (未实现)
+        self.stackWidget.setCurrentIndex(0)
+
+        self.vBoxLayout.addWidget(self.stackWidget)
+        self.teamViewWidget.setLayout(self.teamVLayout)
 
         self.processRing.setVisible(False)
         self.extraTeamView1.setVisible(False)
@@ -436,10 +478,16 @@ class GameDetailView(QFrame):
         self.teamView2.updateTeam(team2, isCherry, self.tr("2nd"))
         self.teamView2.updateSummoners(team2["summoners"])
 
+        self.chartIconWidget.updateIcon(
+            {x["summonerName"]: x["championIcon"] for x in team1["summoners"] + team2["summoners"]})
+
         self.extraTeamView1.setVisible(isCherry)
         self.extraTeamView2.setVisible(isCherry)
 
+        self.titleBar.showChartButton.setEnabled(True)
+
         if isCherry:
+            self.titleBar.showChartButton.setEnabled(False)  # 4队伍图表禁用
             team3 = game["teams"][300]
             team4 = game["teams"][400]
 
@@ -748,7 +796,7 @@ class SummonerInfoBar(QFrame):
         self.__initLayout()
 
         self.summonerName.clicked.connect(lambda: self.parent(
-        ).parent().summonerNameClicked.emit(summoner["puuid"]))
+        ).parent().parent().parent().summonerNameClicked.emit(summoner["puuid"]))
 
     def __initWidget(self, summoner):
         self.isCurrent = summoner["isCurrent"]
@@ -859,6 +907,8 @@ class GameTitleBar(QFrame):
         self.resultLabel = QLabel()
         self.infoLabel = QLabel()
         self.copyGameIdButton = ToolButton(Icon.COPY)
+        self.showChartButton = ToolButton(Icon.CHART)
+        self.showTeamButton = ToolButton(Icon.LIST)
         self.gameId = None
 
         self.__initWidget()
@@ -868,11 +918,24 @@ class GameTitleBar(QFrame):
     def __initWidget(self):
         self.resultLabel.setObjectName("resultLabel")
         self.infoLabel.setObjectName("infoLabel")
+
+        self.showTeamButton.setVisible(False)
+        self.showTeamButton.setFixedSize(36, 36)
+        self.showTeamButton.setToolTip(self.tr("Show Team"))
+        self.showTeamButton.installEventFilter(ToolTipFilter(
+            self.showTeamButton, 500, ToolTipPosition.TOP))
+
+        self.showChartButton.setVisible(False)
+        self.showChartButton.setFixedSize(36, 36)
+        self.showChartButton.setToolTip(self.tr("Show Chart"))
+        self.showChartButton.installEventFilter(ToolTipFilter(
+            self.showChartButton, 500, ToolTipPosition.TOP))
+
         self.copyGameIdButton.setVisible(False)
         self.copyGameIdButton.setFixedSize(36, 36)
         self.copyGameIdButton.setToolTip(self.tr("Copy game ID"))
         self.copyGameIdButton.installEventFilter(ToolTipFilter(
-            self.copyGameIdButton, 500, ToolTipPosition.LEFT))
+            self.copyGameIdButton, 500, ToolTipPosition.TOP))
 
     def __initLayout(self):
         self.infoLayout.setSpacing(0)
@@ -886,6 +949,10 @@ class GameTitleBar(QFrame):
         self.titleBarLayout.addLayout(self.infoLayout)
         self.titleBarLayout.addSpacerItem(QSpacerItem(
             1, 1, QSizePolicy.Expanding, QSizePolicy.Minimum))
+        self.titleBarLayout.addWidget(self.showTeamButton)
+        self.titleBarLayout.addSpacing(10)
+        self.titleBarLayout.addWidget(self.showChartButton)
+        self.titleBarLayout.addSpacing(10)
         self.titleBarLayout.addWidget(self.copyGameIdButton)
         self.titleBarLayout.addSpacing(10)
 
@@ -896,6 +963,8 @@ class GameTitleBar(QFrame):
         self.infoLabel.setText(
             f"{mapName}  ·  {modeName}  ·  {duration}  ·  {creation}  ·  " + self.tr("Game ID: ") + f"{gameId}")
         self.copyGameIdButton.setVisible(True)
+        self.showChartButton.setVisible(True)
+        self.showTeamButton.setVisible(True)
 
         self.setStyleSheet(
             f""" GameTitleBar {{
@@ -908,6 +977,14 @@ class GameTitleBar(QFrame):
     def __connectSignalToSlot(self):
         self.copyGameIdButton.clicked.connect(
             lambda: pyperclip.copy(self.gameId))
+
+        self.showChartButton.clicked.connect(
+            lambda: self.parent().stackWidget.setCurrentIndex(1)
+        )
+
+        self.showTeamButton.clicked.connect(
+            lambda: self.parent().stackWidget.setCurrentIndex(0)
+        )
 
 
 class GamesView(QFrame):
