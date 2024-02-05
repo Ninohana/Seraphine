@@ -1,17 +1,20 @@
 import darkdetect
 from PyQt5.QtCore import Qt, QUrl, pyqtSignal
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineSettings
-from PyQt5.QtWidgets import QWidget, QHBoxLayout
-from pyecharts.charts import Bar
+from PyQt5.QtWidgets import QWidget, QHBoxLayout, QFrame
+
+from pyecharts.charts import Bar, Grid
+from pyecharts.commons.utils import JsCode
 from pyecharts.globals import ThemeType
+from pyecharts import options as opts
+
 from qfluentwidgets import Theme
 from qframelesswindow.webengine import FramelessWebEngineView
-from pyecharts import options as opts
 
 from app.common.config import cfg
 
 
-class GameDetailChartWidget(QWidget):
+class GameDetailChartWidget(QFrame):
     loadHtml = pyqtSignal(str)
 
     def __init__(self, parent=None):
@@ -21,7 +24,8 @@ class GameDetailChartWidget(QWidget):
         self.browser = FramelessWebEngineView(self.window())
         self.browser.setContextMenuPolicy(Qt.NoContextMenu)
         self.browser.page().setBackgroundColor(Qt.transparent)
-        self.browser.page().settings().setAttribute(QWebEngineSettings.ShowScrollBars, False)
+        self.browser.page().settings().setAttribute(
+            QWebEngineSettings.ShowScrollBars, False)
         self.browser.setGeometry(0, 0, self.width(), self.height())
         self.setStyleSheet("border: none;")
         self.hBoxLayout.addWidget(self.browser)
@@ -63,27 +67,63 @@ class GameDetailChartWidget(QWidget):
             )
         )
 
-        # 名称
-        bar.add_xaxis([s['summonerName'] for team in game['teams'].values() for s in team["summoners"]][::-1])
+        keys = ['totalDamageDealtToChampions', 'trueDamageDealtToChampions',
+                'magicDamageDealtToChampions', 'physicalDamageDealtToChampions',
+                'totalDamageTaken', 'trueDamageTaken', 'magicalDamageTaken',
+                'physicalDamageTaken', 'totalHealingDone', 'damageSelfMitigated',
+                'totalMinionsKilled', 'goldEarned', 'visionScore']
 
-        # 数据
-        keys = ['totalDamageDealtToChampions', 'trueDamageDealtToChampions', 'magicDamageDealtToChampions',
-                'physicalDamageDealtToChampions', 'totalDamageTaken', 'trueDamageTaken', 'magicalDamageTaken',
-                'physicalDamageTaken', 'totalHealingDone', 'damageSelfMitigated', 'totalMinionsKilled', 'goldEarned',
-                'visionScore']
+        summoners = [s for team in game['teams'].values()
+                     for s in team['summoners']]
+
+        # 中间加了个假人 ^^
+        phantom = {"summonerName": "", 'championIcon': "", 'chartData': {}}
+        for k in keys:
+            phantom['chartData'][k] = 0
+
+        summoners.insert(5, phantom)
+
+        bar.add_xaxis([s['summonerName'] for s in summoners][::-1])
+
+        # 通过索引判断设置一下颜色
+        colorFormatter = """
+            function(params) {
+                if (params.dataIndex > 5) {
+                    return 'blue';
+                } else {
+                    return 'red';
+                }
+            }
+        """
+
         for k in keys:
             bar.add_yaxis(
                 self.tr(k),
-                [s['chartData'][k] for team in game['teams'].values() for s in team["summoners"]][::-1],
-                gap="0%"
+                [s['chartData'][k] for s in summoners][::-1],
+                gap="0%",
+                itemstyle_opts=opts.ItemStyleOpts(color=JsCode(colorFormatter))
             )
+
+        # 那个假人的数据 "0" 让它不显示
+        labelFormatter = """
+            function(params) {
+                if (params.value === 0) {
+                    return '';
+                } else {
+                    return params.value;
+                }
+            }
+        """
 
         result = (
             bar
             .reversal_axis()
-            .set_series_opts(label_opts=opts.LabelOpts(position="right"))
+            .set_series_opts(label_opts=opts.LabelOpts(position="right",
+                                                       formatter=JsCode(labelFormatter)))
             .set_global_opts(
-                yaxis_opts=opts.AxisOpts(is_show=False),
+                yaxis_opts=opts.AxisOpts(
+                    is_show=False
+                ),
                 legend_opts=opts.LegendOpts(
                     border_radius=5,
                     selected_map={k: False for k in keys[1:]},
@@ -91,6 +131,7 @@ class GameDetailChartWidget(QWidget):
                     background_color=legendBackgroundcolor
                 ),
             )
-            .render())
+            .render()
+        )
 
         self.loadHtml.emit(result)

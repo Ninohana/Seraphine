@@ -1,11 +1,11 @@
 from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtGui import QPixmap
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QSpacerItem, QSizePolicy
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QFrame
 
 from app.components.champion_icon_widget import RoundIcon
 
 
-class ChartIconLabel(QWidget):
+class ChartIconLabel(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.vBoxLayout = QVBoxLayout(self)
@@ -19,18 +19,19 @@ class ChartIconLabel(QWidget):
         """
 
         if self.buffer:
-            idx = 0
-            for name, championIcon in info.items():
-                self.buffer[idx].image = QPixmap(championIcon)
-                self.buffer[idx].setToolTip(name)
-                idx += 1
+            for i, (name, championIcon) in enumerate(info.items()):
+                self.buffer[i].image = QPixmap(championIcon)
             return
 
-        for name, championIcon in info.items():
-            icon = RoundIcon(championIcon, 32, 0, 5)
-            icon.setToolTip(name)
+        for i, (name, championIcon) in enumerate(info.items()):
+            icon = RoundIcon(championIcon, 28, 0, 2)
             self.vBoxLayout.addWidget(icon)
             self.buffer.append(icon)
 
-        self.vBoxLayout.setContentsMargins(self.width() * .07, self.height() * 0.168, 0, self.height() * 0.14)
+            if i == 4:
+                icon = QLabel()
+                icon.setFixedSize(28, 28)
+                self.vBoxLayout.addWidget(icon)
 
+        self.vBoxLayout.setContentsMargins(
+            18, self.height() * 0.168, 0, self.height() * 0.14)
