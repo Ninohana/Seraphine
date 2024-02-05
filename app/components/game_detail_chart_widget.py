@@ -38,6 +38,23 @@ class GameDetailChartWidget(QFrame):
     def refresh(self):
         self.initChartHtml(self.game)
 
+    def translate(self, orig):
+        return {
+            'totalDamageDealtToChampions': self.tr('Total Damage dealt to champions'),
+            'trueDamageDealtToChampions': self.tr('True damage dealt to champions'),
+            'magicDamageDealtToChampions': self.tr('Magic damage dealt to champion'),
+            'physicalDamageDealtToChampions': self.tr('Physical damage dealt to champion'),
+            'totalDamageTaken': self.tr('Total damage taken'),
+            'trueDamageTaken': self.tr('True damage taken'),
+            'magicalDamageTaken': self.tr('Magic damage taken'),
+            'physicalDamageTaken': self.tr('Physical damage taken'),
+            'totalHealingDone': self.tr('Total healing done'),
+            'damageSelfMitigated': self.tr('Demage self mitigated'),
+            'goldEarned': self.tr('Gold earned'),
+            'visionScore': self.tr('Vision score'),
+            'totalMinionsKilled': self.tr("Total minions killed"),
+        }[orig]
+
     def initChartHtml(self, game):
         """
         该方法耗时, 不建议在UI线程执行
@@ -98,7 +115,7 @@ class GameDetailChartWidget(QFrame):
 
         for k in keys:
             bar.add_yaxis(
-                self.tr(k),
+                self.translate(k),
                 [s['chartData'][k] for s in summoners][::-1],
                 gap="0%",
                 itemstyle_opts=opts.ItemStyleOpts(color=JsCode(colorFormatter))
@@ -126,7 +143,7 @@ class GameDetailChartWidget(QFrame):
                 ),
                 legend_opts=opts.LegendOpts(
                     border_radius=5,
-                    selected_map={k: False for k in keys[1:]},
+                    selected_map={self.translate(k): False for k in keys[1:]},
                     type_='scroll',
                     background_color=legendBackgroundcolor
                 ),
